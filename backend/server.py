@@ -529,7 +529,7 @@ class UltraTradingEngine:
                 
                 # Simule un résultat de trade
                 profit_pips = np.random.normal(10, 20)  # Simule profit/perte
-                profit_usd = profit_pips * position_calc.get("lot_size", 0.01) * 10
+                profit_usd = profit_pips * trade_result.get("volume", 0.01) * 10
                 
                 # Crée le contexte de trade pour l'apprentissage
                 trade_context = TradeContext(
