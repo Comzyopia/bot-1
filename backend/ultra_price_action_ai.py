@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 from collections import deque
-import cv2
+# import cv2  # Not used in current implementation
 from scipy.signal import find_peaks, argrelextrema
 from ultra_reward_system import ultra_reward_system, TradeContext, MarketRegime
 
