@@ -76,10 +76,13 @@ class UltraPriceActionAI:
         self.epsilon_decay = 0.9999  # Décroissance très lente
         self.learning_rate = 0.0003
         
-        # 🧠 ARCHITECTURE NEURONAL ULTRA-AVANCÉE
-        self.price_action_model = self._build_price_action_model()
-        self.pattern_recognition_model = self._build_pattern_recognition_model()
-        self.regime_detection_model = self._build_regime_detection_model()
+        # 🧠 ARCHITECTURE NEURONAL ULTRA-AVANCÉE (temporairement désactivé pour debug)
+        # self.price_action_model = self._build_price_action_model()
+        # self.pattern_recognition_model = self._build_pattern_recognition_model()
+        # self.regime_detection_model = self._build_regime_detection_model()
+        self.price_action_model = None
+        self.pattern_recognition_model = None
+        self.regime_detection_model = None
         
         # 📊 MÉMOIRE ET EXPÉRIENCE
         self.memory = deque(maxlen=100000)  # Plus grande mémoire
