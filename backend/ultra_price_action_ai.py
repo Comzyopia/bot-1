@@ -69,6 +69,13 @@ class UltraPriceActionAI:
         self.state_size = state_size
         self.action_size = action_size  # 0=HOLD, 1=BUY, 2=SELL, 3=CLOSE_ALL, 4=SCALE_IN
         
+        # 🎯 PARAMÈTRES D'APPRENTISSAGE OPTIMISÉS (définis en premier)
+        self.gamma = 0.99  # Facteur de discount élevé
+        self.epsilon = 0.8  # Exploration initiale
+        self.epsilon_min = 0.02
+        self.epsilon_decay = 0.9999  # Décroissance très lente
+        self.learning_rate = 0.0003
+        
         # 🧠 ARCHITECTURE NEURONAL ULTRA-AVANCÉE
         self.price_action_model = self._build_price_action_model()
         self.pattern_recognition_model = self._build_pattern_recognition_model()
@@ -78,13 +85,6 @@ class UltraPriceActionAI:
         self.memory = deque(maxlen=100000)  # Plus grande mémoire
         self.price_action_memory = deque(maxlen=50000)
         self.pattern_memory = deque(maxlen=25000)
-        
-        # 🎯 PARAMÈTRES D'APPRENTISSAGE OPTIMISÉS
-        self.gamma = 0.99  # Facteur de discount élevé
-        self.epsilon = 0.8  # Exploration initiale
-        self.epsilon_min = 0.02
-        self.epsilon_decay = 0.9999  # Décroissance très lente
-        self.learning_rate = 0.0003
         
         # 📈 ANALYSE DE MARCHÉ
         self.support_resistance_levels = {}
