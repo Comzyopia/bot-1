@@ -416,7 +416,8 @@ class UltraTradingBotTester:
         try:
             print("Connexion WebSocket...")
             
-            async with websockets.connect(self.ws_url, timeout=10) as websocket:
+            # Fix: Remove timeout parameter from websockets.connect
+            async with websockets.connect(self.ws_url) as websocket:
                 print("WebSocket connecté ✅")
                 
                 # Attendre le message de connexion
