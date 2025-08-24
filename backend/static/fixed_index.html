@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultra Trading Bot - Version Corrigée</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .trading-card {
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        .trading-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(124, 58, 237, 0.2);
+        }
+        .status-online { color: #10b981; }
+        .status-offline { color: #ef4444; }
+        .status-warning { color: #f59e0b; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div x-data="tradingBot()" x-init="init()" class="min-h-screen">
+        <!-- Header -->
+        <header class="gradient-bg shadow-xl border-b border-gray-700">
+            <div class="max-w-7xl mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-robot text-white text-xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold">Ultra Trading Bot</h1>
+                            <p class="text-sm text-gray-400">Version 2.0 - Corrigée</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-6">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 rounded-full" :class="mt5Connected ? 'bg-green-500 pulse' : 'bg-red-500'"></div>
+                            <span class="text-sm" x-text="mt5Connected ? 'MT5 Connecté' : 'MT5 Déconnecté'"></span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 rounded-full" :class="autoTrading ? 'bg-green-500 pulse' : 'bg-gray-500'"></div>
+                            <span class="text-sm" x-text="autoTrading ? 'Trading Auto' : 'Trading Manuel'"></span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 rounded-full" :class="wsConnected ? 'bg-green-500' : 'bg-red-500'"></div>
+                            <span class="text-sm" x-text="wsConnected ? 'En Ligne' : 'Hors Ligne'"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <!-- Configuration Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+                <!-- MT5 Connection -->
+                <div class="trading-card rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-plug mr-2 text-purple-400"></i>
+                        Connexion MT5
+                    </h3>
+                    <div class="space-y-3">
+                        <input x-model="mt5Config.login" type="number" placeholder="Login" 
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none">
+                        <input x-model="mt5Config.password" type="password" placeholder="Password" 
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none">
+                        <input x-model="mt5Config.server" type="text" placeholder="Server" 
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none">
+                        <button @click="connectMT5()" :disabled="connecting" 
+                                class="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors">
+                            <span x-show="!connecting">Connecter</span>
+                            <span x-show="connecting">Connexion...</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Timeframe Selection -->
+                <div class="trading-card rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-clock mr-2 text-blue-400"></i>
+                        Timeframe
+                    </h3>
+                    <div class="space-y-3">
+                        <select x-model="config.timeframe" @change="updateConfig()" 
+                                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none">
+                            <template x-for="tf in timeframes" :key="tf.value">
+                                <option :value="tf.value" x-text="tf.label"></option>
+                            </template>
+                        </select>
+                        <div class="text-xs text-gray-400">
+                            <span x-text="getTimeframeDescription(config.timeframe)"></span>
+                        </div>
+                        <div class="text-xs text-purple-400">
+                            Timeframe actuel: <span x-text="config.timeframe" class="font-bold"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trading Config -->
+                <div class="trading-card rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-cog mr-2 text-green-400"></i>
+                        Configuration
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Risque par trade</label>
+                            <select x-model="config.risk_per_trade" @change="updateConfig()" 
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-green-500 focus:outline-none">
+                                <option value="0.01">1% - Conservateur</option>
+                                <option value="0.02">2% - Modéré</option>
+                                <option value="0.05">5% - Agressif</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Positions max</label>
+                            <input x-model="config.max_positions" type="number" min="1" max="10" @change="updateConfig()" 
+                                   class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-green-500 focus:outline-none">
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input x-model="config.take_trades" type="checkbox" @change="updateConfig()" class="text-green-500">
+                            <label class="text-xs">Prendre des trades</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Info -->
+                <div class="trading-card rounded-xl p-6" x-show="accountInfo">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-wallet mr-2 text-yellow-400"></i>
+                        Compte
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Solde:</span>
+                            <span class="font-bold text-green-400" x-text="formatCurrency(accountInfo?.balance || 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Équité:</span>
+                            <span class="font-bold text-blue-400" x-text="formatCurrency(accountInfo?.equity || 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Marge:</span>
+                            <span class="font-bold text-yellow-400" x-text="formatCurrency(accountInfo?.margin || 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Trades:</span>
+                            <span class="font-bold" x-text="status.total_trades || 0"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="trading-card rounded-xl p-6 mb-8">
+                <div class="flex flex-wrap gap-4 justify-center">
+                    <button @click="startTrading()" :disabled="!mt5Connected || autoTrading" 
+                            class="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center">
+                        <i class="fas fa-play mr-2"></i>
+                        <span x-text="autoTrading ? 'Trading Actif' : 'Démarrer Trading'"></span>
+                    </button>
+                    <button @click="stopTrading()" :disabled="!autoTrading" 
+                            class="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center">
+                        <i class="fas fa-stop mr-2"></i>
+                        Arrêter Trading
+                    </button>
+                    <button @click="analyzeAll()" :disabled="!mt5Connected" 
+                            class="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center">
+                        <i class="fas fa-chart-line mr-2"></i>
+                        Analyser Tout
+                    </button>
+                    <button @click="refreshStatus()" 
+                            class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors flex items-center">
+                        <i class="fas fa-sync mr-2"></i>
+                        Actualiser
+                    </button>
+                </div>
+            </div>
+
+            <!-- Market Analysis -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+                <template x-for="analysis in analyses" :key="analysis.symbol">
+                    <div class="trading-card rounded-xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-bold" x-text="analysis.symbol"></h3>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-3 h-3 rounded-full" :class="getActionColor(analysis.action)"></div>
+                                <span class="text-sm font-medium" x-text="analysis.action"></span>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <!-- Prix et Timeframe -->
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Prix:</span>
+                                <span class="font-bold text-lg" x-text="analysis.current_price?.toFixed(5)"></span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Timeframe:</span>
+                                <span class="font-bold text-purple-400" x-text="analysis.timeframe"></span>
+                            </div>
+                            
+                            <!-- Confiance -->
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Confiance:</span>
+                                    <span class="font-bold" x-text="(analysis.confidence * 100).toFixed(1) + '%'"></span>
+                                </div>
+                                <div class="w-full bg-gray-700 rounded-full h-2">
+                                    <div class="bg-purple-500 h-2 rounded-full transition-all duration-300" 
+                                         :style="'width: ' + (analysis.confidence * 100) + '%'"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Indicateurs -->
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">RSI:</span>
+                                    <span x-text="analysis.indicators?.rsi?.toFixed(1) || 'N/A'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">MACD:</span>
+                                    <span x-text="analysis.indicators?.macd?.toFixed(5) || 'N/A'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">SMA20:</span>
+                                    <span x-text="analysis.indicators?.sma_20?.toFixed(5) || 'N/A'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Force:</span>
+                                    <span x-text="analysis.indicators?.signal_strength || 'N/A'"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- SL/TP -->
+                            <div class="grid grid-cols-2 gap-2 text-xs" x-show="analysis.sl || analysis.tp">
+                                <div class="flex justify-between">
+                                    <span class="text-red-400">SL:</span>
+                                    <span x-text="analysis.sl?.toFixed(5) || 'N/A'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-green-400">TP:</span>
+                                    <span x-text="analysis.tp?.toFixed(5) || 'N/A'"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- Raisonnement -->
+                            <div class="mt-3 p-2 bg-gray-800 rounded text-xs">
+                                <p class="text-gray-400" x-text="analysis.reasoning"></p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                
+                <!-- No Analysis Message -->
+                <div x-show="analyses.length === 0" class="col-span-full text-center py-8">
+                    <div class="text-gray-400">
+                        <i class="fas fa-chart-line text-4xl mb-4"></i>
+                        <p>Aucune analyse disponible</p>
+                        <p class="text-sm">Connectez-vous à MT5 et cliquez sur "Analyser Tout"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Positions -->
+            <div class="trading-card rounded-xl p-6 mb-8" x-show="positions.length > 0">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-area mr-2 text-green-400"></i>
+                    Positions Ouvertes (<span x-text="positions.length"></span>)
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-700">
+                                <th class="text-left py-2">Symbole</th>
+                                <th class="text-left py-2">Type</th>
+                                <th class="text-left py-2">Volume</th>
+                                <th class="text-left py-2">Prix</th>
+                                <th class="text-left py-2">P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="position in positions" :key="position.ticket">
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2 font-medium" x-text="position.symbol"></td>
+                                    <td class="py-2" x-text="position.type === 0 ? 'BUY' : 'SELL'"></td>
+                                    <td class="py-2" x-text="position.volume"></td>
+                                    <td class="py-2" x-text="position.price_open?.toFixed(5)"></td>
+                                    <td class="py-2" :class="position.profit >= 0 ? 'text-green-400' : 'text-red-400'" 
+                                        x-text="formatCurrency(position.profit || 0)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Trading History -->
+            <div class="trading-card rounded-xl p-6" x-show="tradeHistory.length > 0">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-history mr-2 text-blue-400"></i>
+                    Historique des Trades (<span x-text="tradeHistory.length"></span>)
+                </h3>
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                    <template x-for="trade in tradeHistory.slice().reverse()" :key="trade.timestamp">
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-3 h-3 rounded-full" :class="getActionColor(trade.action)"></div>
+                                <span class="font-medium" x-text="trade.symbol"></span>
+                                <span class="text-sm text-gray-400" x-text="trade.action"></span>
+                                <span class="text-sm" x-text="trade.volume"></span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-medium" x-text="trade.price?.toFixed(5)"></div>
+                                <div class="text-xs text-gray-400" x-text="formatTime(trade.timestamp)"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Logs -->
+            <div class="trading-card rounded-xl p-6 mt-8">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-terminal mr-2 text-gray-400"></i>
+                    Logs Système
+                </h3>
+                <div class="space-y-1 max-h-64 overflow-y-auto font-mono text-xs">
+                    <template x-for="log in logs.slice().reverse()" :key="log.timestamp">
+                        <div class="flex items-start space-x-2">
+                            <span class="text-gray-500" x-text="formatTime(log.timestamp)"></span>
+                            <span :class="getLogColor(log.type)" x-text="log.message"></span>
+                        </div>
+                    </template>
+                    <div x-show="logs.length === 0" class="text-center text-gray-400 py-4">
+                        Aucun log disponible
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function tradingBot() {
+            return {
+                // State
+                mt5Connected: false,
+                wsConnected: false,
+                autoTrading: false,
+                connecting: false,
+                
+                // Configuration
+                mt5Config: {
+                    login: 1296306,
+                    password: '@0JxCmJa',
+                    server: 'FreshForex-MT5'
+                },
+                config: {
+                    timeframe: 'M5',
+                    symbols: ['EURUSD', 'GBPUSD', 'USDJPY'],
+                    risk_per_trade: 0.02,
+                    max_positions: 5,
+                    take_trades: true
+                },
+                
+                // Data
+                accountInfo: null,
+                analyses: [],
+                positions: [],
+                tradeHistory: [],
+                status: {},
+                logs: [],
+                timeframes: [
+                    { value: 'M1', label: '1 Minute', description: 'Scalping ultra-rapide' },
+                    { value: 'M5', label: '5 Minutes', description: 'Scalping et day trading' },
+                    { value: 'M15', label: '15 Minutes', description: 'Day trading' },
+                    { value: 'M30', label: '30 Minutes', description: 'Day trading et swing' },
+                    { value: 'H1', label: '1 Heure', description: 'Swing trading' },
+                    { value: 'H4', label: '4 Heures', description: 'Swing et position trading' },
+                    { value: 'D1', label: '1 Jour', description: 'Position trading' },
+                    { value: 'W1', label: '1 Semaine', description: 'Trading long terme' },
+                    { value: 'MN1', label: '1 Mois', description: 'Investissement long terme' }
+                ],
+                
+                // WebSocket
+                ws: null,
+                
+                // Methods
+                init() {
+                    this.connectWebSocket();
+                    this.refreshStatus();
+                    this.addLog('Application initialisée', 'info');
+                },
+                
+                connectWebSocket() {
+                    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/ws`;
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        this.wsConnected = true;
+                        this.addLog('WebSocket connecté', 'success');
+                        
+                        // Send ping every 30 seconds
+                        setInterval(() => {
+                            if (this.ws.readyState === WebSocket.OPEN) {
+                                this.ws.send(JSON.stringify({ type: 'ping' }));
+                            }
+                        }, 30000);
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        this.handleWebSocketMessage(data);
+                    };
+                    
+                    this.ws.onclose = () => {
+                        this.wsConnected = false;
+                        this.addLog('WebSocket déconnecté', 'warning');
+                        setTimeout(() => this.connectWebSocket(), 5000);
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        this.addLog('Erreur WebSocket', 'error');
+                    };
+                },
+                
+                handleWebSocketMessage(data) {
+                    switch (data.type) {
+                        case 'mt5_connection':
+                            this.mt5Connected = data.success;
+                            if (data.success) {
+                                this.accountInfo = data.account_info;
+                                this.addLog('Connexion MT5 réussie', 'success');
+                            } else {
+                                this.addLog('Échec connexion MT5', 'error');
+                            }
+                            break;
+                            
+                        case 'mt5_disconnection':
+                            this.mt5Connected = false;
+                            this.autoTrading = false;
+                            this.accountInfo = null;
+                            this.addLog('Déconnexion MT5', 'info');
+                            break;
+                            
+                        case 'trading_status':
+                            this.autoTrading = data.running;
+                            this.addLog(data.message, 'info');
+                            break;
+                            
+                        case 'status_update':
+                            this.status = data.status;
+                            this.positions = data.positions || [];
+                            this.autoTrading = data.status.auto_trading;
+                            break;
+                            
+                        case 'trade_executed':
+                            this.tradeHistory.push(data.trade);
+                            this.addLog(`Trade exécuté: ${data.trade.action} ${data.trade.symbol}`, 'success');
+                            break;
+                            
+                        case 'pong':
+                            // Heartbeat response
+                            break;
+                    }
+                },
+                
+                async connectMT5() {
+                    this.connecting = true;
+                    try {
+                        const response = await fetch('/api/mt5/connect', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.mt5Config)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.mt5Connected = true;
+                            this.accountInfo = result.account_info;
+                            this.addLog('Connexion MT5 réussie', 'success');
+                        } else {
+                            this.addLog('Échec connexion MT5: ' + result.message, 'error');
+                        }
+                    } catch (error) {
+                        this.addLog('Erreur connexion MT5: ' + error.message, 'error');
+                    } finally {
+                        this.connecting = false;
+                    }
+                },
+                
+                async updateConfig() {
+                    try {
+                        const response = await fetch('/api/config/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.config)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.addLog('Configuration mise à jour', 'success');
+                        } else {
+                            this.addLog('Erreur configuration', 'error');
+                        }
+                    } catch (error) {
+                        this.addLog('Erreur configuration: ' + error.message, 'error');
+                    }
+                },
+                
+                async startTrading() {
+                    try {
+                        const response = await fetch('/api/trading/start', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.autoTrading = true;
+                            this.addLog('Trading automatique démarré', 'success');
+                        } else {
+                            this.addLog('Erreur démarrage trading', 'error');
+                        }
+                    } catch (error) {
+                        this.addLog('Erreur démarrage trading: ' + error.message, 'error');
+                    }
+                },
+                
+                async stopTrading() {
+                    try {
+                        const response = await fetch('/api/trading/stop', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.autoTrading = false;
+                            this.addLog('Trading automatique arrêté', 'info');
+                        }
+                    } catch (error) {
+                        this.addLog('Erreur arrêt trading: ' + error.message, 'error');
+                    }
+                },
+                
+                async analyzeAll() {
+                    try {
+                        this.addLog('Analyse en cours...', 'info');
+                        const response = await fetch('/api/analysis/all');
+                        const result = await response.json();
+                        
+                        if (result.analyses) {
+                            this.analyses = result.analyses;
+                            this.addLog(`Analyse complétée (${result.analyses.length} symboles)`, 'success');
+                        } else {
+                            this.addLog('Erreur analyse', 'error');
+                        }
+                    } catch (error) {
+                        this.addLog('Erreur analyse: ' + error.message, 'error');
+                    }
+                },
+                
+                async refreshStatus() {
+                    try {
+                        const response = await fetch('/api/status');
+                        const result = await response.json();
+                        
+                        this.status = result;
+                        this.mt5Connected = result.connected_to_mt5;
+                        this.autoTrading = result.auto_trading;
+                        
+                        // Get trade history
+                        const historyResponse = await fetch('/api/trades/history');
+                        const historyResult = await historyResponse.json();
+                        this.tradeHistory = historyResult.trades || [];
+                        
+                        // Get positions
+                        const positionsResponse = await fetch('/api/positions');
+                        const positionsResult = await positionsResponse.json();
+                        this.positions = positionsResult.positions || [];
+                        
+                    } catch (error) {
+                        this.addLog('Erreur actualisation: ' + error.message, 'error');
+                    }
+                },
+                
+                // Utility methods
+                formatCurrency(amount) {
+                    return new Intl.NumberFormat('fr-FR', {
+                        style: 'currency',
+                        currency: 'USD'
+                    }).format(amount);
+                },
+                
+                formatTime(timestamp) {
+                    return new Date(timestamp).toLocaleTimeString('fr-FR');
+                },
+                
+                getTimeframeDescription(timeframe) {
+                    const tf = this.timeframes.find(t => t.value === timeframe);
+                    return tf ? tf.description : 'Description non disponible';
+                },
+                
+                getActionColor(action) {
+                    const colors = {
+                        'STRONG_BUY': 'bg-green-500',
+                        'BUY': 'bg-green-400',
+                        'HOLD': 'bg-gray-400',
+                        'SELL': 'bg-red-400',
+                        'STRONG_SELL': 'bg-red-500'
+                    };
+                    return colors[action] || 'bg-gray-400';
+                },
+                
+                getLogColor(type) {
+                    const colors = {
+                        'success': 'text-green-400',
+                        'error': 'text-red-400',
+                        'warning': 'text-yellow-400',
+                        'info': 'text-blue-400'
+                    };
+                    return colors[type] || 'text-gray-400';
+                },
+                
+                addLog(message, type = 'info') {
+                    const log = {
+                        timestamp: new Date(),
+                        message: message,
+                        type: type
+                    };
+                    
+                    this.logs.push(log);
+                    
+                    // Keep only last 50 logs
+                    if (this.logs.length > 50) {
+                        this.logs = this.logs.slice(-50);
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
